@@ -28,7 +28,7 @@
         }
 
         .container {
-            max-width: 900px;
+            max-width: 950px;
             margin: 0 auto;
             background: #ffffff;
             border-radius: 16px;
@@ -105,16 +105,17 @@
             color: #4a5568;
         }
 
-        input {
+        input, select {
             padding: 12px 14px;
             border: 1px solid #cbd5e0;
             border-radius: 8px;
             font-size: 0.95rem;
             transition: all 0.2s ease;
             outline: none;
+            background: #fff;
         }
 
-        input:focus {
+        input:focus, select:focus {
             border-color: #667eea;
             box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
         }
@@ -155,11 +156,24 @@
             background: #718096;
         }
 
+        .controls-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+
+        .sort-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
         .export-group {
             display: flex;
             gap: 10px;
-            justify-content: flex-end;
-            margin-bottom: 15px;
         }
 
         .btn-export {
@@ -186,10 +200,18 @@
             color: white;
         }
 
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin: 25px 0 12px 0;
+            color: #2d3748;
+        }
+
         .table-container {
             overflow-x: auto;
             border-radius: 8px;
             border: 1px solid #e2e8f0;
+            margin-bottom: 25px;
         }
 
         table {
@@ -257,6 +279,12 @@
             color: #a0aec0;
             font-style: italic;
         }
+
+        .time-badge {
+            font-size: 0.78rem;
+            color: #718096;
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -300,12 +328,28 @@
         </div>
     </form>
 
-    <!-- Export Buttons -->
-    <div class="export-group">
-        <button id="btnExcel" class="btn-export btn-excel">📊 Export to Excel</button>
-        <button id="btnPdf" class="btn-export btn-pdf">📄 Download PDF</button>
+    <!-- Controls Row (Sorting & Exporting) -->
+    <div class="controls-row">
+        <div class="sort-group">
+            <label for="sortBy" style="margin-bottom:0;">Sort By:</label>
+            <select id="sortBy">
+                <option value="time-desc">Latest Entry First</option>
+                <option value="time-asc">Oldest Entry First</option>
+                <option value="roll-asc">Roll (Ascending 1-9)</option>
+                <option value="roll-desc">Roll (Descending 9-1)</option>
+                <option value="name-asc">Name (A-Z)</option>
+                <option value="name-desc">Name (Z-A)</option>
+            </select>
+        </div>
+
+        <div class="export-group">
+            <button id="btnExcel" class="btn-export btn-excel">📊 Export to Excel</button>
+            <button id="btnPdf" class="btn-export btn-pdf">📄 Download PDF</button>
+        </div>
     </div>
 
+    <!-- Fine History Table -->
+    <h2 class="section-title">📜 Fine Log History</h2>
     <div class="table-container">
         <table>
             <thead>
@@ -314,11 +358,30 @@
                     <th>Name</th>
                     <th>Reason</th>
                     <th>Amount</th>
+                    <th>Date & Time</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody id="fineList">
-                <tr><td colspan="5" class="empty-state">Loading data from database...</td></tr>
+                <tr><td colspan="6" class="empty-state">Loading data from database...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Per Person Total Summary Section -->
+    <h2 class="section-title">👤 Per Person Fine Summary</h2>
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Roll</th>
+                    <th>Student Name</th>
+                    <th>Total Fine Count</th>
+                    <th>Total Fine Amount (৳)</th>
+                </tr>
+            </thead>
+            <tbody id="personSummaryList">
+                <tr><td colspan="4" class="empty-state">No student summary available.</td></tr>
             </tbody>
         </table>
     </div>
@@ -329,7 +392,7 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getDatabase, ref, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-    // Security PIN Code (আপনি চাইলে নিচের "1234" পরিবর্তন করে নিজের পছন্দমতো পিন দিতে পারেন)
+    // Security PIN Code
     const SECURITY_PIN = "1234";
 
     // Your Web App's Firebase Configuration
@@ -357,25 +420,61 @@
     const submitBtn = document.getElementById('submitBtn');
     const cancelBtn = document.getElementById('cancelBtn');
     const fineList = document.getElementById('fineList');
+    const personSummaryList = document.getElementById('personSummaryList');
     const totalAmountEl = document.getElementById('totalAmount');
+    const sortBySelect = document.getElementById('sortBy');
 
     let currentFines = {};
 
+    // Helper Function to Format Timestamp
+    function formatTimestamp(timestamp) {
+        if (!timestamp) return 'N/A';
+        const d = new Date(timestamp);
+        return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
     // Read Data in Realtime
     onValue(finesRef, (snapshot) => {
-        fineList.innerHTML = '';
-        let total = 0;
         const data = snapshot.val();
         currentFines = data || {};
+        renderUI();
+    }, (error) => {
+        console.error("Firebase Error:", error);
+        fineList.innerHTML = `<tr><td colspan="6" class="empty-state" style="color: red;">Database Connection Error! Please check Firebase Rules.</td></tr>`;
+    });
 
-        if (!data) {
-            fineList.innerHTML = `<tr><td colspan="5" class="empty-state">No fine records added yet.</td></tr>`;
+    // Render Both Fine Table and Person Summary
+    function renderUI() {
+        fineList.innerHTML = '';
+        personSummaryList.innerHTML = '';
+        let total = 0;
+
+        if (Object.keys(currentFines).length === 0) {
+            fineList.innerHTML = `<tr><td colspan="6" class="empty-state">No fine records added yet.</td></tr>`;
+            personSummaryList.innerHTML = `<tr><td colspan="4" class="empty-state">No student summary available.</td></tr>`;
             totalAmountEl.innerText = '0';
             return;
         }
 
-        Object.keys(data).forEach((key) => {
-            const fine = data[key];
+        // Convert object to array for sorting
+        let fineArray = Object.keys(currentFines).map(key => ({
+            key: key,
+            ...currentFines[key]
+        }));
+
+        // Apply Sorting
+        const sortType = sortBySelect.value;
+        fineArray.sort((a, b) => {
+            if (sortType === 'roll-asc') return parseInt(a.roll) - parseInt(b.roll);
+            if (sortType === 'roll-desc') return parseInt(b.roll) - parseInt(a.roll);
+            if (sortType === 'name-asc') return a.name.localeCompare(b.name);
+            if (sortType === 'name-desc') return b.name.localeCompare(a.name);
+            if (sortType === 'time-asc') return (a.timestamp || 0) - (b.timestamp || 0);
+            return (b.timestamp || 0) - (a.timestamp || 0); // time-desc default
+        });
+
+        // 1. Render Main Fine Log Table
+        fineArray.forEach((fine) => {
             total += parseFloat(fine.amount);
             const row = document.createElement('tr');
             row.innerHTML = `
@@ -383,10 +482,11 @@
                 <td>${fine.name}</td>
                 <td>${fine.reason}</td>
                 <td><strong>${fine.amount} ৳</strong></td>
+                <td><span class="time-badge">${formatTimestamp(fine.timestamp)}</span></td>
                 <td>
                     <div class="actions">
-                        <button class="btn-action btn-edit" data-key="${key}">Edit</button>
-                        <button class="btn-action btn-delete" data-key="${key}">Delete</button>
+                        <button class="btn-action btn-edit" data-key="${fine.key}">Edit</button>
+                        <button class="btn-action btn-delete" data-key="${fine.key}">Delete</button>
                     </div>
                 </td>
             `;
@@ -395,19 +495,46 @@
 
         totalAmountEl.innerText = total.toLocaleString();
 
-        // Event Listeners for Edit/Delete Buttons
+        // 2. Render Per Person Summary Table
+        const studentSummary = {};
+        Object.values(currentFines).forEach(fine => {
+            const rollKey = fine.roll;
+            if (!studentSummary[rollKey]) {
+                studentSummary[rollKey] = {
+                    name: fine.name,
+                    roll: fine.roll,
+                    count: 0,
+                    totalAmount: 0
+                };
+            }
+            studentSummary[rollKey].count += 1;
+            studentSummary[rollKey].totalAmount += parseFloat(fine.amount);
+        });
+
+        const sortedSummary = Object.values(studentSummary).sort((a, b) => parseInt(a.roll) - parseInt(b.roll));
+        sortedSummary.forEach(student => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td><strong>#${student.roll}</strong></td>
+                <td>${student.name}</td>
+                <td>${student.count} times</td>
+                <td><strong>${student.totalAmount} ৳</strong></td>
+            `;
+            personSummaryList.appendChild(row);
+        });
+
+        // Event Listeners for Edit/Delete
         document.querySelectorAll('.btn-edit').forEach(btn => {
             btn.addEventListener('click', (e) => editFine(e.target.getAttribute('data-key')));
         });
         document.querySelectorAll('.btn-delete').forEach(btn => {
             btn.addEventListener('click', (e) => deleteFine(e.target.getAttribute('data-key')));
         });
-    }, (error) => {
-        console.error("Firebase Error:", error);
-        fineList.innerHTML = `<tr><td colspan="5" class="empty-state" style="color: red;">Database Connection Error! Please check Firebase Database Rules.</td></tr>`;
-    });
+    }
 
-    // Add or Update Fine
+    sortBySelect.addEventListener('change', renderUI);
+
+    // Add or Update Fine Record
     fineForm.addEventListener('submit', function(e) {
         e.preventDefault();
 
@@ -416,12 +543,25 @@
         const reason = reasonInput.value.trim();
         const amount = parseFloat(amountInput.value);
         const editKey = editKeyInput.value;
+        const currentTimestamp = Date.now();
 
         if (editKey === "") {
-            push(finesRef, { name, roll, reason, amount });
+            push(finesRef, { 
+                name, 
+                roll, 
+                reason, 
+                amount,
+                timestamp: currentTimestamp 
+            });
         } else {
             const itemRef = ref(db, `fines/${editKey}`);
-            update(itemRef, { name, roll, reason, amount });
+            update(itemRef, { 
+                name, 
+                roll, 
+                reason, 
+                amount,
+                updatedAt: currentTimestamp 
+            });
         }
 
         resetForm();
@@ -430,7 +570,7 @@
     // Protected Edit Function
     function editFine(key) {
         const userPin = prompt("🔒 Enter Admin Password to Edit:");
-        if (userPin === null) return; // User canceled
+        if (userPin === null) return;
         
         if (userPin === SECURITY_PIN) {
             const item = currentFines[key];
@@ -451,7 +591,7 @@
     // Protected Delete Function
     function deleteFine(key) {
         const userPin = prompt("🔒 Enter Admin Password to Delete:");
-        if (userPin === null) return; // User canceled
+        if (userPin === null) return;
 
         if (userPin === SECURITY_PIN) {
             if (confirm('Are you sure you want to delete this record?')) {
@@ -486,7 +626,8 @@
             "Roll Number": fine.roll,
             "Student Name": fine.name,
             "Reason": fine.reason,
-            "Amount (BDT)": fine.amount
+            "Amount (BDT)": fine.amount,
+            "Date & Time": formatTimestamp(fine.timestamp)
         }));
 
         const worksheet = XLSX.utils.json_to_sheet(excelData);
@@ -510,7 +651,7 @@
         doc.setFontSize(12);
         doc.text("Class Fine Collection Report", 14, 22);
 
-        const tableColumn = ["Roll", "Student Name", "Reason", "Amount (BDT)"];
+        const tableColumn = ["Roll", "Student Name", "Reason", "Amount (BDT)", "Date"];
         const tableRows = [];
         let totalAmount = 0;
 
@@ -519,13 +660,14 @@
                 `#${fine.roll}`,
                 fine.name,
                 fine.reason,
-                `${fine.amount} TK`
+                `${fine.amount} TK`,
+                formatTimestamp(fine.timestamp)
             ];
             tableRows.push(fineData);
             totalAmount += parseFloat(fine.amount);
         });
 
-        tableRows.push(["", "", "Total Collected:", `${totalAmount} TK`]);
+        tableRows.push(["", "", "", "Total Collected:", `${totalAmount} TK`]);
 
         doc.autoTable({
             head: [tableColumn],
