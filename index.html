@@ -5,6 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Class Fine Manager - JEE/CGNT-A/70/01</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- SheetJS CDN (Excel Export) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- jsPDF CDN (PDF Export) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+
     <style>
         * {
             box-sizing: border-box;
@@ -148,6 +155,37 @@
             background: #718096;
         }
 
+        .export-group {
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+            margin-bottom: 15px;
+        }
+
+        .btn-export {
+            padding: 8px 14px;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .btn-export:hover {
+            opacity: 0.9;
+        }
+
+        .btn-excel {
+            background: #27ae60;
+            color: white;
+        }
+
+        .btn-pdf {
+            background: #e74c3c;
+            color: white;
+        }
+
         .table-container {
             overflow-x: auto;
             border-radius: 8px;
@@ -262,6 +300,12 @@
         </div>
     </form>
 
+    <!-- Export Buttons -->
+    <div class="export-group">
+        <button id="btnExcel" class="btn-export btn-excel">📊 Export to Excel</button>
+        <button id="btnPdf" class="btn-export btn-pdf">📄 Download PDF</button>
+    </div>
+
     <div class="table-container">
         <table>
             <thead>
@@ -285,15 +329,15 @@
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getDatabase, ref, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-    // FIXME: আপনার ফায়ারবেস কনফিগারেশন কী দিয়ে নিচের অংশটুকু পরিবর্তন করুন
+    // Your Web App's Firebase Configuration
     const firebaseConfig = {
-        apiKey: "YOUR_API_KEY",
-        authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-        databaseURL: "https://YOUR_PROJECT_ID-default-rtdb.firebaseio.com",
-        projectId: "YOUR_PROJECT_ID",
-        storageBucket: "YOUR_PROJECT_ID.appspot.com",
-        messagingSenderId: "YOUR_SENDER_ID",
-        appId: "YOUR_APP_ID"
+        apiKey: "AIzaSyCddhLGYLMEHRMrIYBkACcomLJjkCOM9Gk",
+        authDomain: "class-fine-manager.firebaseapp.com",
+        databaseURL: "https://class-fine-manager-default-rtdb.firebaseio.com",
+        projectId: "class-fine-manager",
+        storageBucket: "class-fine-manager.firebasestorage.app",
+        messagingSenderId: "4267833926",
+        appId: "1:4267833926:web:d7aa73fadf0e577d646847"
     };
 
     // Initialize Firebase
@@ -355,6 +399,9 @@
         document.querySelectorAll('.btn-delete').forEach(btn => {
             btn.addEventListener('click', (e) => deleteFine(e.target.getAttribute('data-key')));
         });
+    }, (error) => {
+        console.error("Firebase Error:", error);
+        fineList.innerHTML = `<tr><td colspan="5" class="empty-state" style="color: red;">Database Connection Error! Please check Firebase Database Rules.</td></tr>`;
     });
 
     // Add or Update Fine
@@ -368,10 +415,8 @@
         const editKey = editKeyInput.value;
 
         if (editKey === "") {
-            // Push new data to Firebase
             push(finesRef, { name, roll, reason, amount });
         } else {
-            // Update existing data
             const itemRef = ref(db, `fines/${editKey}`);
             update(itemRef, { name, roll, reason, amount });
         }
@@ -409,6 +454,70 @@
         submitBtn.style.background = '#48bb78';
         cancelBtn.style.display = 'none';
     }
+
+    // Export Excel Functionality
+    document.getElementById('btnExcel').addEventListener('click', () => {
+        if (!currentFines || Object.keys(currentFines).length === 0) {
+            alert("No fine records available to export!");
+            return;
+        }
+
+        const excelData = Object.values(currentFines).map((fine, index) => ({
+            "SL No": index + 1,
+            "Roll Number": fine.roll,
+            "Student Name": fine.name,
+            "Reason": fine.reason,
+            "Amount (BDT)": fine.amount
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(excelData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Fine Records");
+        XLSX.writeFile(workbook, "Batch_JEE_CGNT_Fine_Records.xlsx");
+    });
+
+    // Export PDF Functionality
+    document.getElementById('btnPdf').addEventListener('click', () => {
+        if (!currentFines || Object.keys(currentFines).length === 0) {
+            alert("No fine records available to download!");
+            return;
+        }
+
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+
+        doc.setFontSize(16);
+        doc.text("Batch: JEE/CGNT-A/70/01", 14, 15);
+        doc.setFontSize(12);
+        doc.text("Class Fine Collection Report", 14, 22);
+
+        const tableColumn = ["Roll", "Student Name", "Reason", "Amount (BDT)"];
+        const tableRows = [];
+        let totalAmount = 0;
+
+        Object.values(currentFines).forEach(fine => {
+            const fineData = [
+                `#${fine.roll}`,
+                fine.name,
+                fine.reason,
+                `${fine.amount} TK`
+            ];
+            tableRows.push(fineData);
+            totalAmount += parseFloat(fine.amount);
+        });
+
+        tableRows.push(["", "", "Total Collected:", `${totalAmount} TK`]);
+
+        doc.autoTable({
+            head: [tableColumn],
+            body: tableRows,
+            startY: 28,
+            theme: 'striped',
+            headStyles: { fillColor: [102, 126, 234] }
+        });
+
+        doc.save("Batch_Fine_Report.pdf");
+    });
 </script>
 
 </body>
