@@ -28,7 +28,7 @@
         }
 
         .container {
-            max-width: 950px;
+            max-width: 1000px;
             margin: 0 auto;
             background: #ffffff;
             border-radius: 16px;
@@ -62,33 +62,51 @@
             font-weight: 700;
         }
 
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+
         .stats-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            padding: 24px;
+            padding: 20px;
             border-radius: 12px;
             text-align: center;
-            margin-bottom: 30px;
-            box-shadow: 0 10px 15px -3px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        .stats-card.total {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .stats-card.paid {
+            background: linear-gradient(135deg, #38ef7d 0%, #11998e 100%);
+        }
+
+        .stats-card.due {
+            background: linear-gradient(135deg, #ff416c 0%, #ff4b2b 100%);
         }
 
         .stats-card h3 {
-            font-size: 0.95rem;
+            font-size: 0.85rem;
             text-transform: uppercase;
             letter-spacing: 1px;
             opacity: 0.9;
-            margin-bottom: 8px;
-            font-weight: 500;
+            margin-bottom: 6px;
+            font-weight: 600;
         }
 
-        .stats-card .total-amount {
-            font-size: 2.5rem;
+        .stats-card .amount {
+            font-size: 1.8rem;
             font-weight: 700;
         }
 
         .form-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
             gap: 15px;
             margin-bottom: 20px;
         }
@@ -243,16 +261,26 @@
 
         .actions {
             display: flex;
-            gap: 8px;
+            gap: 6px;
+            flex-wrap: wrap;
         }
 
         .btn-action {
-            padding: 6px 12px;
+            padding: 6px 10px;
             border: none;
             border-radius: 6px;
-            font-size: 0.8rem;
+            font-size: 0.78rem;
             font-weight: 600;
             cursor: pointer;
+        }
+
+        .btn-status-toggle {
+            background: #edf2f7;
+            color: #2d3748;
+        }
+
+        .btn-status-toggle:hover {
+            background: #e2e8f0;
         }
 
         .btn-edit {
@@ -285,6 +313,27 @@
             color: #718096;
             display: block;
         }
+
+        /* Status Badges */
+        .status-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .status-paid {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+
+        .status-due {
+            background: #fed7d7;
+            color: #9b2c2c;
+        }
     </style>
 </head>
 <body>
@@ -295,9 +344,20 @@
         <h1>Fine Collection Fund</h1>
     </header>
 
-    <div class="stats-card">
-        <h3>Total Collection</h3>
-        <div class="total-amount"><span id="totalAmount">0</span> ৳</div>
+    <!-- Financial Overview Stats -->
+    <div class="stats-grid">
+        <div class="stats-card total">
+            <h3>Total Assessed</h3>
+            <div class="amount"><span id="totalAmount">0</span> ৳</div>
+        </div>
+        <div class="stats-card paid">
+            <h3>Total Paid</h3>
+            <div class="amount"><span id="totalPaidAmount">0</span> ৳</div>
+        </div>
+        <div class="stats-card due">
+            <h3>Total Due</h3>
+            <div class="amount"><span id="totalDueAmount">0</span> ৳</div>
+        </div>
     </div>
 
     <form id="fineForm">
@@ -320,6 +380,13 @@
                 <label for="amount">Amount (৳)</label>
                 <input type="number" id="amount" placeholder="e.g., 50" required>
             </div>
+            <div class="form-group">
+                <label for="status">Payment Status</label>
+                <select id="status" required>
+                    <option value="Paid">Paid</option>
+                    <option value="Due" selected>Due</option>
+                </select>
+            </div>
         </div>
 
         <div class="btn-group">
@@ -335,6 +402,8 @@
             <select id="sortBy">
                 <option value="time-desc">Latest Entry First</option>
                 <option value="time-asc">Oldest Entry First</option>
+                <option value="status-due">Status (Due First)</option>
+                <option value="status-paid">Status (Paid First)</option>
                 <option value="roll-asc">Roll (Ascending 1-9)</option>
                 <option value="roll-desc">Roll (Descending 9-1)</option>
                 <option value="name-asc">Name (A-Z)</option>
@@ -358,12 +427,13 @@
                     <th>Name</th>
                     <th>Reason</th>
                     <th>Amount</th>
+                    <th>Status</th>
                     <th>Date & Time</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody id="fineList">
-                <tr><td colspan="6" class="empty-state">Loading data from database...</td></tr>
+                <tr><td colspan="7" class="empty-state">Loading data from database...</td></tr>
             </tbody>
         </table>
     </div>
@@ -376,12 +446,14 @@
                 <tr>
                     <th>Roll</th>
                     <th>Student Name</th>
-                    <th>Total Fine Count</th>
-                    <th>Total Fine Amount (৳)</th>
+                    <th>Total Fines</th>
+                    <th>Paid Amount (৳)</th>
+                    <th>Due Amount (৳)</th>
+                    <th>Total Fine (৳)</th>
                 </tr>
             </thead>
             <tbody id="personSummaryList">
-                <tr><td colspan="4" class="empty-state">No student summary available.</td></tr>
+                <tr><td colspan="6" class="empty-state">No student summary available.</td></tr>
             </tbody>
         </table>
     </div>
@@ -393,7 +465,7 @@
     import { getDatabase, ref, push, onValue, remove, update } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
     // Security PIN Code
-    const SECURITY_PIN = "1234";
+    const SECURITY_PIN = "4050";
 
     // Your Web App's Firebase Configuration
     const firebaseConfig = {
@@ -416,12 +488,15 @@
     const rollNoInput = document.getElementById('rollNo');
     const reasonInput = document.getElementById('reason');
     const amountInput = document.getElementById('amount');
+    const statusInput = document.getElementById('status');
     const editKeyInput = document.getElementById('editKey');
     const submitBtn = document.getElementById('submitBtn');
     const cancelBtn = document.getElementById('cancelBtn');
     const fineList = document.getElementById('fineList');
     const personSummaryList = document.getElementById('personSummaryList');
     const totalAmountEl = document.getElementById('totalAmount');
+    const totalPaidAmountEl = document.getElementById('totalPaidAmount');
+    const totalDueAmountEl = document.getElementById('totalDueAmount');
     const sortBySelect = document.getElementById('sortBy');
 
     let currentFines = {};
@@ -440,26 +515,32 @@
         renderUI();
     }, (error) => {
         console.error("Firebase Error:", error);
-        fineList.innerHTML = `<tr><td colspan="6" class="empty-state" style="color: red;">Database Connection Error! Please check Firebase Rules.</td></tr>`;
+        fineList.innerHTML = `<tr><td colspan="7" class="empty-state" style="color: red;">Database Connection Error! Please check Firebase Rules.</td></tr>`;
     });
 
     // Render Both Fine Table and Person Summary
     function renderUI() {
         fineList.innerHTML = '';
         personSummaryList.innerHTML = '';
-        let total = 0;
+        
+        let totalAssessed = 0;
+        let totalPaid = 0;
+        let totalDue = 0;
 
         if (Object.keys(currentFines).length === 0) {
-            fineList.innerHTML = `<tr><td colspan="6" class="empty-state">No fine records added yet.</td></tr>`;
-            personSummaryList.innerHTML = `<tr><td colspan="4" class="empty-state">No student summary available.</td></tr>`;
+            fineList.innerHTML = `<tr><td colspan="7" class="empty-state">No fine records added yet.</td></tr>`;
+            personSummaryList.innerHTML = `<tr><td colspan="6" class="empty-state">No student summary available.</td></tr>`;
             totalAmountEl.innerText = '0';
+            totalPaidAmountEl.innerText = '0';
+            totalDueAmountEl.innerText = '0';
             return;
         }
 
         // Convert object to array for sorting
         let fineArray = Object.keys(currentFines).map(key => ({
             key: key,
-            ...currentFines[key]
+            ...currentFines[key],
+            status: currentFines[key].status || 'Due' // Default fallback for existing legacy items
         }));
 
         // Apply Sorting
@@ -469,22 +550,37 @@
             if (sortType === 'roll-desc') return parseInt(b.roll) - parseInt(a.roll);
             if (sortType === 'name-asc') return a.name.localeCompare(b.name);
             if (sortType === 'name-desc') return b.name.localeCompare(a.name);
+            if (sortType === 'status-due') return a.status === 'Due' ? -1 : 1;
+            if (sortType === 'status-paid') return a.status === 'Paid' ? -1 : 1;
             if (sortType === 'time-asc') return (a.timestamp || 0) - (b.timestamp || 0);
             return (b.timestamp || 0) - (a.timestamp || 0); // time-desc default
         });
 
         // 1. Render Main Fine Log Table
         fineArray.forEach((fine) => {
-            total += parseFloat(fine.amount);
+            const amt = parseFloat(fine.amount) || 0;
+            totalAssessed += amt;
+            
+            if (fine.status === 'Paid') {
+                totalPaid += amt;
+            } else {
+                totalDue += amt;
+            }
+
+            const statusClass = fine.status === 'Paid' ? 'status-paid' : 'status-due';
+            const toggleText = fine.status === 'Paid' ? 'Mark Due' : 'Mark Paid';
+
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td><strong>#${fine.roll}</strong></td>
                 <td>${fine.name}</td>
                 <td>${fine.reason}</td>
                 <td><strong>${fine.amount} ৳</strong></td>
+                <td><span class="status-badge ${statusClass}">${fine.status}</span></td>
                 <td><span class="time-badge">${formatTimestamp(fine.timestamp)}</span></td>
                 <td>
                     <div class="actions">
+                        <button class="btn-action btn-status-toggle" data-key="${fine.key}" data-status="${fine.status}">${toggleText}</button>
                         <button class="btn-action btn-edit" data-key="${fine.key}">Edit</button>
                         <button class="btn-action btn-delete" data-key="${fine.key}">Delete</button>
                     </div>
@@ -493,22 +589,36 @@
             fineList.appendChild(row);
         });
 
-        totalAmountEl.innerText = total.toLocaleString();
+        totalAmountEl.innerText = totalAssessed.toLocaleString();
+        totalPaidAmountEl.innerText = totalPaid.toLocaleString();
+        totalDueAmountEl.innerText = totalDue.toLocaleString();
 
         // 2. Render Per Person Summary Table
         const studentSummary = {};
         Object.values(currentFines).forEach(fine => {
             const rollKey = fine.roll;
+            const amt = parseFloat(fine.amount) || 0;
+            const status = fine.status || 'Due';
+
             if (!studentSummary[rollKey]) {
                 studentSummary[rollKey] = {
                     name: fine.name,
                     roll: fine.roll,
                     count: 0,
+                    paidAmount: 0,
+                    dueAmount: 0,
                     totalAmount: 0
                 };
             }
+
             studentSummary[rollKey].count += 1;
-            studentSummary[rollKey].totalAmount += parseFloat(fine.amount);
+            studentSummary[rollKey].totalAmount += amt;
+
+            if (status === 'Paid') {
+                studentSummary[rollKey].paidAmount += amt;
+            } else {
+                studentSummary[rollKey].dueAmount += amt;
+            }
         });
 
         const sortedSummary = Object.values(studentSummary).sort((a, b) => parseInt(a.roll) - parseInt(b.roll));
@@ -518,12 +628,21 @@
                 <td><strong>#${student.roll}</strong></td>
                 <td>${student.name}</td>
                 <td>${student.count} times</td>
+                <td style="color:#27ae60;"><strong>${student.paidAmount} ৳</strong></td>
+                <td style="color:#e74c3c;"><strong>${student.dueAmount} ৳</strong></td>
                 <td><strong>${student.totalAmount} ৳</strong></td>
             `;
             personSummaryList.appendChild(row);
         });
 
-        // Event Listeners for Edit/Delete
+        // Event Listeners
+        document.querySelectorAll('.btn-status-toggle').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const key = e.target.getAttribute('data-key');
+                const currentStatus = e.target.getAttribute('data-status');
+                toggleStatus(key, currentStatus);
+            });
+        });
         document.querySelectorAll('.btn-edit').forEach(btn => {
             btn.addEventListener('click', (e) => editFine(e.target.getAttribute('data-key')));
         });
@@ -534,6 +653,23 @@
 
     sortBySelect.addEventListener('change', renderUI);
 
+    // Toggle Payment Status
+    function toggleStatus(key, currentStatus) {
+        const userPin = prompt("🔒 Enter Admin Password to change payment status:");
+        if (userPin === null) return;
+
+        if (userPin === SECURITY_PIN) {
+            const newStatus = currentStatus === 'Paid' ? 'Due' : 'Paid';
+            const itemRef = ref(db, `fines/${key}`);
+            update(itemRef, { 
+                status: newStatus,
+                updatedAt: Date.now()
+            });
+        } else {
+            alert("❌ Incorrect Password!");
+        }
+    }
+
     // Add or Update Fine Record
     fineForm.addEventListener('submit', function(e) {
         e.preventDefault();
@@ -542,6 +678,7 @@
         const roll = rollNoInput.value.trim();
         const reason = reasonInput.value.trim();
         const amount = parseFloat(amountInput.value);
+        const status = statusInput.value;
         const editKey = editKeyInput.value;
         const currentTimestamp = Date.now();
 
@@ -551,6 +688,7 @@
                 roll, 
                 reason, 
                 amount,
+                status,
                 timestamp: currentTimestamp 
             });
         } else {
@@ -560,6 +698,7 @@
                 roll, 
                 reason, 
                 amount,
+                status,
                 updatedAt: currentTimestamp 
             });
         }
@@ -578,6 +717,7 @@
             rollNoInput.value = item.roll;
             reasonInput.value = item.reason;
             amountInput.value = item.amount;
+            statusInput.value = item.status || 'Due';
             editKeyInput.value = key;
 
             submitBtn.innerText = 'Update Fine Record';
@@ -612,6 +752,7 @@
         submitBtn.innerText = 'Add Fine Record';
         submitBtn.style.background = '#48bb78';
         cancelBtn.style.display = 'none';
+        statusInput.value = 'Due';
     }
 
     // Export Excel Functionality
@@ -627,6 +768,7 @@
             "Student Name": fine.name,
             "Reason": fine.reason,
             "Amount (BDT)": fine.amount,
+            "Status": fine.status || 'Due',
             "Date & Time": formatTimestamp(fine.timestamp)
         }));
 
@@ -651,23 +793,31 @@
         doc.setFontSize(12);
         doc.text("Class Fine Collection Report", 14, 22);
 
-        const tableColumn = ["Roll", "Student Name", "Reason", "Amount (BDT)", "Date"];
+        const tableColumn = ["Roll", "Student Name", "Reason", "Amount (BDT)", "Status", "Date"];
         const tableRows = [];
         let totalAmount = 0;
+        let totalPaid = 0;
 
         Object.values(currentFines).forEach(fine => {
+            const amt = parseFloat(fine.amount) || 0;
+            const status = fine.status || 'Due';
+            
             const fineData = [
                 `#${fine.roll}`,
                 fine.name,
                 fine.reason,
                 `${fine.amount} TK`,
+                status,
                 formatTimestamp(fine.timestamp)
             ];
             tableRows.push(fineData);
-            totalAmount += parseFloat(fine.amount);
+            totalAmount += amt;
+            if (status === 'Paid') totalPaid += amt;
         });
 
-        tableRows.push(["", "", "", "Total Collected:", `${totalAmount} TK`]);
+        tableRows.push(["", "", "Total Assessed:", `${totalAmount} TK`, "", ""]);
+        tableRows.push(["", "", "Total Paid:", `${totalPaid} TK`, "", ""]);
+        tableRows.push(["", "", "Total Due:", `${totalAmount - totalPaid} TK`, "", ""]);
 
         doc.autoTable({
             head: [tableColumn],
